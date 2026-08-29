@@ -7,19 +7,24 @@
 #include <iostream>
 #include <map>
 #include "sound.h"
-#include "udp_server.h"
+#include "misc/udp_server.h"
 #include "key.h"
 #include "key_new.h"
 #include "settings.h"
 #include "display.h"
 #include "console.h"
+#include "lcdstripe/lcdpainter.h"
 
 using namespace std;
 
 SDL_Window* window;
+SDL_Renderer* renderer;
+MyLCDView*  lcdview;
 
-//init resource, this function is not supposed to be called repeatedly, otherwise there will be resource leak
-bool init_resource() {
+//Initialize Resource, this function is not supposed to be called repeatedly, otherwise there will be resource leak.
+// If you are trying to create an emscripten/android/ios version, init_resource() should be called only once,
+// emu_entry() is the only function you need to re-call after switching rom or model. 
+void init_resource() {
   #if defined(__MINGW32__)
   SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
 #endif
@@ -28,13 +33,12 @@ bool init_resource() {
 
   if(listen_port>0) init_udp_server(listen_port);
 
-  extern SDL_Renderer* renderer;
   lcd_effect_buffer = new unsigned char[SCREEN_HEIGHT*total_size* SCREEN_WIDTH*total_size * 4];
   memset(lcd_effect_buffer, 0, SCREEN_HEIGHT*total_size* SCREEN_WIDTH*total_size * 4);
 
   if (SDL_Init(SDL_INIT_EVERYTHING) == -1) {
     std::cout << " Failed to initialize SDL : " << SDL_GetError() << std::endl;
-    return false;
+    exit(-1);
   }
   init_audio();
 
@@ -42,17 +46,17 @@ bool init_resource() {
     SDL_CreateWindow(get_str_of_mode().c_str(), 0, 40, lcd_scale * (SCREEN_WIDTH +LEFT_GAP +RIGHT_GAP-1) *total_size +(LEFT_GAP_EXTRA+RIGHT_GAP_EXTRA)*lcd_scale, lcd_scale * SCREEN_HEIGHT *total_size, 0);
   if (!window) {
     std::cout << "Failed to create window : " << SDL_GetError() << std::endl;
-    return false;
+    exit(-1);
   }
   renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) {
     std::cout << "Failed to create renderer : " << SDL_GetError() << std::endl;
-    return false;
+    exit(-1);
   }
 
-  init_lcd_stripe();//need to call after renderer is created
+  lcdview = new MyLCDView(("resource/lcdstripe_slice_"+lcdstripe_suffix+".json").c_str());
+  lcdview->loadStripeTexture(("resource/lcdstripe_"+lcdstripe_suffix+".bmp").c_str(), renderer);
   
-  return true;
 }
 
 long long get_current_time_milliseconds() {
@@ -81,10 +85,6 @@ void main_loop() {
 
 
   while (loop) {
-    if(reload_pending){
-      if(debug_level>=1) printf("reload pending, exit main loop\n");
-      break;
-    }
     if(sync_on_resume && enable_auto_time_sync)
     {
       last_time_rtc = current_time_rtc;
@@ -110,6 +110,11 @@ void main_loop() {
     }
     if(! power_save){
       RunTimeSlice(SLICE_INTERVAL);
+    }
+  
+    if(reload_pending){
+      if(debug_level>=1) printf("reload pending, exit main loop\n");
+      break;
     }
 
     SDL_Event event;
@@ -207,25 +212,27 @@ void main_loop() {
   }
 }
 
-//entry point of the emulator, this function can be called repeatedly if you need.
-//for example, you can change model and rom path, then call this function again to switch to new model and rom
+//Entry Point of the emulator, this function can be called repeatedly if you need.
+// repeating calling this function can be useful if you are creating an emscripten/android/ios version.
+//E.g., you can change model and rom path, then call this function again to switch to new model and rom without restarting the whole program,
+// check reload/load_nc2000/load_nc1020 command in cmd.cpp as an example
 void emu_entry(){ 
     LoadNC2k();
     main_loop();
-    SaveNC2kIfNeed();
 }
 
 int main(int argc, char* args[]) {
   process_args(argc, args);
-  if(!init_resource()) return -1;
+  init_resource();
 
   do {
     reload_pending=false;
     emu_entry();
   } while (reload_pending);
 
+  SaveNC2kIfNeed(); // handle --auto-save-flash or --auto-save-all
 
-  shutdown_audio(); //explictly shutdown audio to avoid bug on some platform. Other resources OS can recollect them correctly.
+  shutdown_audio(); //explictly shutdown audio to avoid bug on some platform. Other resources doesn't need this, since OS can always recollect them correctly.
 
   return 0;
 }

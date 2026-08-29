@@ -66,7 +66,7 @@ int enable_key_debug_once=0;
 
 int debug_level = 0;
 
-bool enable_assert = false;
+bool enable_assert_for_wqx_software = false;
 
 /*
 ===================
@@ -76,7 +76,7 @@ emulation parameter
 uint32_t SLICE_INTERVAL= 1;  //unit ms
 uint32_t power_save_interval=1200;
 uint32_t cpu_batch=64;
-
+uint32_t mi_clear_delay_value=1;
 bool enable_keepon = true;
 bool enable_auto_time_sync= true;
 
@@ -236,7 +236,7 @@ void ProcessBinaryLinear(uint8_t* dest, uint8_t* src, uint32_t size){
     }
 }
 
-
+//use vector<char> here, because some platform's string has issue in storing '\0' in the middle
 void read_file(string name,vector<char> &v){
     FILE *f = fopen(name.c_str(), "rb");
     if(f==0) {

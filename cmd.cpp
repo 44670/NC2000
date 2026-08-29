@@ -18,6 +18,8 @@ extern "C" {
 #include "nc2000.h"
 #include "nor.h"
 #include "settings.h"
+#include <SDL2/SDL.h>
+#include "misc/bin_dec.h"
 extern nc2k_states_t nc2k_states;
 extern CPUInterface *cpu;
 
@@ -206,11 +208,21 @@ string translate_cmd_alias(string name){
 	if(name=="sp") name="speed";
 	if(name=="ed"||name=="ec"||name=="modify") name="edit";
 	if(name=="ffl") name="fast_forward_limit";
+
+	if(name=="rl") name="reload";
+	if(name=="rls") name="reload_state";
+
 	if(name=="l0") name="load_pc1000";
 	if(name=="l1") name="load_nc1020";
 	if(name=="l1t"||name=="l1tw") name="load_nc1020tw";
 	if(name=="l2") name="load_nc2000";
 	if(name=="l3") name="load_nc3000";
+
+	if(name=="ls0") name="load_state_pc1000";
+	if(name=="ls1") name="load_state_nc1020";
+	if(name=="ls1t"||name=="ls1tw") name="load_state_nc1020tw";
+	if(name=="ls2") name="load_state_nc2000";
+	if(name=="ls3") name="load_state_nc3000";
 	return name;
 }
 void handle_cmd(string str){
@@ -249,34 +261,55 @@ void handle_cmd(string str){
 		exit(-1);
 	}
 
-	if(cmds[0]=="reload"){
+	if(cmds[0]=="reload"||cmds[0]=="reload_state"){
+		if(save_state_on_exit||save_flash_on_exit){
+			SaveNC2kIfNeed();
+		}
+		enable_load_state=(cmds[0]=="reload_state");
 		reload_pending=true;
 		return;
 	}
 
-	if(cmds[0]=="load_nc2000"||cmds[0]=="load_nc3000"||cmds[0]=="load_nc1020"||cmds[0]=="load_nc1020tw"||cmds[0]=="load_pc1000"){
+	bool is_load_state_cmd = cmds[0].find("load_state") != string::npos;
+	if(is_load_state_cmd){
+		cmds[0]=cmds[0].substr(strlen("load_state_")); //remove "load_state_"
+		cmds[0]="load_"+cmds[0];
+	}
+
+	if(cmds[0]=="load_nc2000"||cmds[0]=="load_nc3000"||cmds[0]=="load_nc1020"||cmds[0]=="load_nc1020tw"||cmds[0]=="load_pc1000") {
+		if(cmds.size()>1){
+			if(!fileExists(cmds[1]+".nor")) { //basic typo check, if nor file not exist, don't even try to load
+				printf("file %s.nor not exist, cannot load\n",cmds[1].c_str());
+				return;
+			}
+		}
+		if(save_state_on_exit||save_flash_on_exit){
+			SaveNC2kIfNeed();
+		}
 		rom_path.clear();
 		if(cmds.size()>1){
 			rom_path=cmds[1];
-		}else{
-			if(cmds[0]=="load_nc2000") rom_path="roms/nc2000";
-			else if(cmds[0]=="load_nc1020") rom_path="roms/nc1020";
-			else if(cmds[0]=="load_nc1020tw") rom_path="roms/nc1020tw";
-			else if(cmds[0]=="load_nc3000") rom_path="roms/nc3000";
-			else if(cmds[0]=="load_pc1000") rom_path="roms/pc1000";
 		}
+
 		extern WqxRom nc2k_rom;
 		nc2k_rom.clear();
 		nc2000mode=nc3000mode=nc1020mode=nc1020tw_mode=pc1000mode=false;
-		enable_load_state=false;
+		
+		enable_load_state=is_load_state_cmd;
+
 		if(cmds[0]=="load_nc2000") nc2000mode=true;
 		if(cmds[0]=="load_nc3000") nc3000mode=true;
 		if(cmds[0]=="load_nc1020"||cmds[0]=="load_nc1020tw") nc1020mode=true;
 		if(cmds[0]=="load_nc1020tw") nc1020tw_mode=true;
 		if(cmds[0]=="load_pc1000") pc1000mode=true;
-		handle_rom();
+
 		init_parameters();
+		handle_rom();
+
 		reload_pending=true;
+
+		extern SDL_Window* window;
+		SDL_SetWindowTitle(window, get_title().c_str());
 		return;
 	}
 
@@ -352,6 +385,10 @@ void handle_cmd(string str){
 	}
 
 	if(cmds[0]=="create_folder" || cmds[0]=="create_folder_hex"){
+			if(cmds.size()<2){
+				printf("not enough argument\n");
+				return;
+			}
 			//printf("<pc=%x>\n",cpu->PC);
 			cpu->PC=0x3000;
 			string dir_name=cmds[1];
@@ -441,6 +478,10 @@ void handle_cmd(string str){
 		return;
 	}
 	if(cmds[0]=="get"){
+			if(cmds.size()<2){
+				printf("not enough argument\n");
+				return;
+			}
 			//if(!nc2000mode) return;
 			string src=cmds[1];
 			string target=cmds[1];
@@ -496,7 +537,29 @@ void handle_cmd(string str){
 			//enable_dyn_debug=true;
 			return;
 	}
+	if(cmds[0]=="putx"){
+			if(cmds.size()<2){
+				printf("not enough argument\n");
+				return;
+			}
+			string outname="bindec.tmp";
+			if(bin_dec(cmds[1],outname)){
+				printf("binary decode failed.\n");
+				return ;
+			}
+			cmds[0]="put";
+			if(cmds.size()<3){
+				cmds.push_back(split_s(cmds[1],"/").back());
+			}
+			cmds[1]=outname;
+
+			//no return here, continue to next if. since putx is a wrapper around put
+	}
 	if(cmds[0]=="put"){
+			if(cmds.size()<2){
+				printf("not enough argument\n");
+				return;
+			}
 			vector<char> file;
 			if(read_file_noexit(cmds[1], file)!=0){
 				return ;

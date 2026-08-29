@@ -9,6 +9,7 @@
 #include "iv_uart.h"
 #include "nor.h"
 #include "settings.h"
+#include "misc/bin_dec.h"
 using namespace std;
 extern WqxRom nc2k_rom;
 void print_help(){
@@ -18,9 +19,6 @@ void print_help(){
 }
 int listen_port=9000;
 void handle_rom(){
-	extern uint8_t nor_info_block0[0x100];
-	memcpy(nor_info_block, nor_info_block0, sizeof(nor_info_block0));
-	
 	if(nc2000mode){
 		if(rom_path.empty()){
 			rom_path = "roms/nc2000";
@@ -40,8 +38,6 @@ void handle_rom(){
 		}
 		nc2k_rom.romPath = rom_path + ".rom";
 		nc2k_rom.norFlashPath = rom_path + ".nor";
-		nor_info_block[8]=0xfc;
-		nor_info_block[9]=0x03;
 
 		if(rom_path != default_with_suffix){
 			if (!fileExists(nc2k_rom.romPath.c_str())) {
@@ -137,12 +133,21 @@ void process_args(int argc, char *argv[])
 		{"uart-log-level", required_argument, 0, 1},
 		{"uart-passthrough", required_argument, 0, 1},
 		{"uart-advance", no_argument, 0, 1},
+		{"mi-clear-delay", required_argument, 0, 1},
 		{NULL, 0, 0, 0}
 	};
 	string uart_dev_name;
 	int option_index = 0;
-    if (argc == 1)
-	{
+    if (argc >= 2&& (strcmp(argv[1],"bindec")==0||strcmp(argv[1],"--bindec")==0)){
+		//built-in binary decode tool for convinence
+		if(argc<4) {
+			printf("not enough parameters. usage:\n");
+			printf("    ./this_program bindec <input_file> <output_file>\n");
+			exit(-1) ;
+		}
+		printf("decypting bin %s into %s\n",argv[2],argv[3]);
+		bin_dec(argv[2], argv[3]);
+		exit(-1) ;
         //printf("no argument provided\n");
 	}
 	for (i = 0; i < argc; i++)
@@ -359,7 +364,7 @@ void process_args(int argc, char *argv[])
 				enable_quit_after_debug_next_n = true;
 			}
 			else if (strcmp(long_options[option_index].name,"assert")==0){
-				enable_assert = true;
+				enable_assert_for_wqx_software = true;
 			}
 			else if (strcmp(long_options[option_index].name,"rgb-scale")==0){
 				sscanf(optarg,"%lf,%lf,%lf",&r_scale,&g_scale,&b_scale);
@@ -379,9 +384,12 @@ void process_args(int argc, char *argv[])
 			else if(strcmp(long_options[option_index].name,"uart-advance")==0){
 				uart_advance = true;
 			}
+			else if (strcmp(long_options[option_index].name,"mi-clear-delay")==0){
+				mi_clear_delay_value = stoi(optarg);
+			}
 			else
 			{
-				printf("unknown option\n");
+				printf("unknown option <%s>\n", long_options[option_index].name);
 				print_help();
 				exit(-1);
 			}
@@ -412,8 +420,6 @@ void process_args(int argc, char *argv[])
 		exit(-1);
 	}
 
-	handle_rom();
-
 	if(lcdstripe_suffix.empty()){
 		if(pixel_size+gap_size==5){
 			lcdstripe_suffix = "w938";
@@ -425,6 +431,6 @@ void process_args(int argc, char *argv[])
 	if(!uart_dev_name.empty()){
 		open_serial_port((char*)uart_dev_name.c_str());
 	}
-
 	init_parameters();
+	handle_rom();
 }

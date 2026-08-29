@@ -4,7 +4,6 @@ extern "C" {
 }
 #include "comm.h"
 #include "cpu.h"
-#include "ram.h"
 
 CPUInterface *cpu;
 
@@ -12,6 +11,8 @@ unsigned char illegal_op_byte[256];
 unsigned char illegal_op_cycle[256];
 
 void CPUInterface::reset(){
+	mi_clear_delay=0;
+
 	if(version==CPU_EMUX) return cpu_impl_emux->reset();
 
 	CpuInitialize();
@@ -61,16 +62,23 @@ int CPUInterface::execute(int max_cycles){
     }
 
     do{
-		if (g_irq && !mI){
+		if(mi_clear_delay){
+			mi_clear_delay--;
+		}else if (g_irq && !mI){
 			g_irq = false;
-			if(enable_dyn_debug_next_n) printf("execute irq!!!!!!!\n");
+			if(enable_dyn_debug_next_n||enable_dyn_debug||enable_debug_pc) printf("execute irq!!!!!!!\n");
 			cycle+=CpuExecuteIRQ();
 			//cycle+=1;
 		}
+
 		void debug_pc();
 		debug_pc();
-		if(g_wai) {cycle=max_cycles;if(cycle<=0) cycle=1;break;}
+		if(g_wai) {cycle=max_cycles;if(cycle<=0) cycle=jam_cycles;break;}
+		bool old_mi=mI;
 		cycle += CpuExecuteOP();
+		if(old_mi==true && mI==false) {//mI flipped from true to false
+			mi_clear_delay=mi_clear_delay_value;
+		}
     }while(cycle<=max_cycles);
 
 	int res=cycle;
@@ -257,8 +265,6 @@ void initalize_illegal_op_tables(){
 	byte[0x7c]=3;cycle[0x7c]=4;
 	byte[0xdc]=3;cycle[0xdc]=4;
 	byte[0xfc]=3;cycle[0xfc]=4;
-
-	const int jam_cycles=6;//jam hangs the cpu it doesn't really has cycles, use 6 as a placeholder
 
 	//JAM (KIL,HLT)
 	byte[0x02]=1;cycle[0x02]=jam_cycles;

@@ -38,6 +38,14 @@ enum NOR_CMD{
     PAGE_PROGRAM=8,
     INFO_PAGE_PROGRAM=9
 };
+
+void InitNorInfoBlock(){
+    memcpy(nor_info_block, nor_info_block0, sizeof(nor_info_block0));
+    if(nc1020mode){
+        nor_info_block[8]=0xfc;
+        nor_info_block[9]=0x03;
+    }
+}
 void LoadNor(){
 	assert(sizeof(nor_buff) >= NOR_SIZE);
 	uint8_t* temp_buff = (uint8_t*)malloc(NOR_SIZE);
@@ -68,8 +76,8 @@ void LoadNor(){
     }
 
     if(patch_nc1020tw_nor){
-        void try_fix_dump();
-        try_fix_dump();
+        void try_fix_nc1020tw_baddump();
+        try_fix_nc1020tw_baddump();
     }
 
 	free(temp_buff);
@@ -96,6 +104,7 @@ void SaveNor(string file)
 
 void init_nor(){
     memset(&nor_buff,0xff,NOR_SIZE);
+    InitNorInfoBlock();
     LoadNor();
     for (uint32_t i=0; i<num_nor_pages; i++) {
 		nor_banks[i] = nor_buff + (0x8000 * i);
@@ -324,7 +333,8 @@ bool write_nor(uint16_t addr, uint8_t value){
     return true;
 }
 
-void try_fix_dump(){
+//only used to run the bad dumped nc1020tw rom, not needed for normal rom. disabled by default
+void try_fix_nc1020tw_baddump(){
     //this rom is a bad dump, some bytes are erased to 00. 
     //here doing dynamic patch to fix it
     if(nc1020tw_mode){

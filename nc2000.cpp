@@ -24,11 +24,6 @@ extern WqxRom nc2k_rom;
 
 nc2k_states_t nc2k_states;
 
-//static uint32_t& version = nc1020_states.version;
-
-static uint8_t* keypad_matrix = nc2k_states.keypad_matrix;
-
-
 void save_state(string file_name){
 	if(file_name.empty()) file_name=nc2k_rom.statesPath;
 	else file_name+=".state";
@@ -69,6 +64,7 @@ void LoadNC2k(){
 	nc2k_states.init(); //fix re-run issue on emscripten version
 	clear_cmds();
 	clear_nand_status();
+	clear_iv();
 
 	init_keyitems();
 
@@ -185,7 +181,7 @@ void RunTimeSlice(uint32_t time_slice) {
 
 	u64_t target_cycles=nc2k_states.cycles +new_cycles;
 
-	while (nc2k_states.cycles < target_cycles) {
+	while (nc2k_states.cycles < target_cycles && !reload_pending) {
 		if(cpu_loop_version == CPU_RUN1){
 			cpu_run();
 		}else if (cpu_loop_version == CPU_RUN2){
@@ -278,9 +274,9 @@ void nc2k_warm_reset(){
 void nc2k_cold_reset(){
     clear_cmds();
     clear_nand_status();
+    clear_iv();//if this is put into warm_reset, alarm wakeup will not work correcly
 
     nc2k_warm_reset();
-    clear_iv();//if this is put into warm_reset, alarm wakeup will not work correcly
 
     //memset(ram_io,0,sizeof(nc2k_states.ram_io));
     //memset(ext_reg, 0, sizeof(nc2k_states.ext_reg));

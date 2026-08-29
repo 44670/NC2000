@@ -6,7 +6,7 @@
 #include "cmd.h"
 #include "ram.h"
 #include "state.h"
-#include "disassembler.h"
+#include "misc/disassembler.h"
 #include "compare/pc1000bus.h"
 #include "io_new.h"
 #include "iv_uart.h"
@@ -143,15 +143,22 @@ void bumpRTC(){
     }
 }
 
+int get_adjusted_year(int year){
+	if(year<1932) {
+		printf("invalid year %d, use 1932 instead\n",year);
+		return 1932;
+	}
+	if(year<2032) return year;
+	printf("current year %d is too large for wqx, adjusted to %d\n",year, 2004+ (year-2004)%28);
+	return 2004+ (year-2004)%28;
+}
+
 void sync_time_2000(){
 		printf("sync_time() called\n");
 		time_t current_time = time(NULL);
 		struct tm *local_time = localtime(&current_time);
-		if(local_time->tm_year + 1900 >2031) {
-			printf("skip sync_time(), since current year %d is too large for wqx\n",local_time->tm_year + 1900);
-			return;
-		}
-		Store(0x3fa, local_time->tm_year - 103 +0x7a);
+		int adjusted_year=get_adjusted_year(local_time->tm_year + 1900);
+		Store(0x3fa, adjusted_year + 0x7a - 2003);
 		Store(0x3fb, local_time->tm_mon);
 		Store(0x3fc, local_time->tm_mday-1);
 		//Store(0x3fd, local_time->tm_wday);
@@ -165,11 +172,8 @@ void sync_time_1020(){
 	printf("sync_time() called\n");
 	time_t current_time = time(NULL);
 	struct tm *local_time = localtime(&current_time);
-	if(local_time->tm_year + 1900 >2031) {
-		printf("skip sync_time(), since current year %d is too large for wqx\n",local_time->tm_year + 1900);
-		return;
-	}
-	Store(0x472, local_time->tm_year - 103 +0x7a);
+	int adjusted_year=get_adjusted_year(local_time->tm_year + 1900);
+	Store(0x472, adjusted_year + 0x7a - 2003);
 	Store(0x473, local_time->tm_mon);
 	Store(0x474, local_time->tm_mday-1);
 	//Store(0x3fd, local_time->tm_wday);
@@ -224,7 +228,7 @@ void debug_pc(){
 
 		//printf("tick=%lld ",tick /*, reg_pc*/);
 		//printf("%02x %02x %02x %02x; ",Peek16Debug(cpu->PC), Peek16Debug(cpu->PC+1),Peek16Debug(cpu->PC+2),Peek16Debug(cpu->PC+3));
-		printf("%s",disassemble2(cpu->PC).c_str());
+		printf("%s",disassemble_next2(cpu->PC).c_str());
 		printf("\n");
 		if(enable_dyn_debug_next_n>0) {
 			enable_dyn_debug_next_n--;
@@ -237,10 +241,10 @@ void debug_pc(){
 		}
 		//getchar();
 	}
-	if(debug_level>=1 || enable_assert){
+	if(debug_level>=1 || enable_assert_for_wqx_software){
 		if(Peek16Debug(cpu->PC)==0x00 && Peek16Debug(cpu->PC+1)==0x00 && Peek16Debug(cpu->PC+2)==0x00){
 			if(debug_level>=1)printf("oops brk 0000!!!!!!!!!!!!!!!!!!!!!!\n");
-			if(enable_assert) assert(false);
+			if(enable_assert_for_wqx_software) assert(false);
 		}
 	}
 
@@ -284,6 +288,10 @@ void cpu_run3(){
 			}
 		}
 	}
+	if(reload_pending){
+		return;
+	}
+
 	if(nc2000mode){
 		bool is_nc2600_rom(void);
 		if(is_nc2600_rom()){

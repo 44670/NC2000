@@ -5,7 +5,7 @@ extern "C" {
 #include "ansi/w65c02.h"
 }
 #include "comm.h"
-#include "disassembler.h"
+#include "misc/disassembler.h"
 #include "mem.h"
 #include "state.h"
 #include <mutex>
@@ -25,8 +25,9 @@ extern nc2k_states_t nc2k_states;
 static unsigned short &gThreadFlags=nc2k_states.gThreadFlags;
 static bool &timer0run= nc2k_states.timer0run;
 static bool &timer1run_tmie= nc2k_states.timer1run_tmie;
-static int gDeadlockCounter = 0;
 static unsigned char *zpioregs=nc2k_states.ram_io;
+
+static int &gDeadlockCounter = nc2k_states.gDeadlockCounter;
 
 static u64_t& cycles = nc2k_states.cycles;
 //static bool& should_irq = nc1020_states.should_irq;
@@ -211,7 +212,7 @@ bool KeepTimer01( unsigned int cpuTick )
 }
 
 
-void cpu_run(){
+void cpu_run(){ //legacy cpu loop1, not suggested to use unless for comparison and debug
 		string msg=get_message();
 		if(!msg.empty()){
 			handle_cmd(msg);
@@ -350,7 +351,7 @@ void cpu_run(){
 
 }
 
-void cpu_run2(){
+void cpu_run2(){ //legacy cpu loop2, not suggested to use unless for comparison and debug
 	string msg=get_message();
 	if(!msg.empty()){
 		handle_cmd(msg);
@@ -446,12 +447,11 @@ void cpu_run2(){
 		}
 		//g_irq = true;
 	}
-	static int my_cnt=0;
 	if ((nc1020mode) && cycles >= timebase_cycles) {
 		timebase_cycles += CYCLES_TIMEBASE;
-		my_cnt++;
+		uint32_t hack1020_cnt= cycles/CYCLES_TIMEBASE;
 		// cheat boot program to pass
-		if(my_cnt%20==10){
+		if(hack1020_cnt%20==10){
 				ram_io[0x0c]|=0x01;
 		}
 		else{

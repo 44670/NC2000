@@ -146,7 +146,7 @@ extern bool enable_debug_cks;
 
 extern int enable_key_debug_once;
 
-extern bool enable_assert;
+extern bool enable_assert_for_wqx_software;
 /*
 ===================
 cpu related
@@ -164,6 +164,7 @@ emulation parameter
 extern uint32_t SLICE_INTERVAL;
 extern uint32_t power_save_interval;
 extern uint32_t cpu_batch;
+extern uint32_t mi_clear_delay_value;
 extern bool enable_keepon;
 extern bool enable_auto_time_sync;
 
@@ -241,6 +242,7 @@ extern uint32_t CYCLES_MS;
 const uint32_t DSP_AUDIO_HZ = 8000;
 const uint32_t BEEPER_AUDIO_HZ = 44100;
 
+const int jam_cycles=6;//jam hangs the cpu it doesn't really has cycles, use 6 as a placeholder
 /*
 ===================
 rom related
